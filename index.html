@@ -1,0 +1,416 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+  <title>Penagihan Kas RT - Sampah & Perelek</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <style>
+    body { -webkit-tap-highlight-color: transparent; }
+    @keyframes slideUp {
+      from { transform: translateY(100%); }
+      to { transform: translateY(0); }
+    }
+    .animate-slide-up { animation: slideUp 0.22s ease-out; }
+  </style>
+</head>
+<body class="bg-slate-100 text-slate-900 pb-24 select-none">
+
+  <!-- Header Sticky -->
+  <header class="bg-emerald-600 text-white p-4 sticky top-0 z-10 shadow-md">
+    <div class="max-w-md mx-auto">
+      <div class="flex justify-between items-center">
+        <div>
+          <h1 class="text-lg font-bold tracking-tight">Penagihan Kas RT</h1>
+          <p class="text-xs text-emerald-100">Sampah (Rp7rb/mgg) & Perelek</p>
+        </div>
+        <button onclick="muatData()" class="bg-white/20 hover:bg-white/30 active:scale-95 transition px-3 py-1.5 rounded-lg text-xs font-semibold">
+          ↻ Refresh
+        </button>
+      </div>
+
+      <div class="mt-3 bg-emerald-700/70 border border-emerald-500/40 rounded-xl p-3 flex justify-between items-center">
+        <span class="text-xs font-medium text-emerald-100">Uang Terkumpul Hari Ini:</span>
+        <span id="kasHariIni" class="text-lg font-extrabold tracking-wide">Rp0</span>
+      </div>
+    </div>
+  </header>
+
+  <!-- Konten Utama -->
+  <main class="max-w-md mx-auto p-4">
+    <!-- Pencarian -->
+    <div class="mb-3">
+      <input
+        type="text"
+        id="searchInput"
+        oninput="filterWarga()"
+        placeholder="🔍 Cari nama warga atau blok rumah..."
+        class="w-full px-4 py-3 bg-white border border-slate-300 rounded-xl text-base shadow-sm focus:outline-none focus:border-emerald-600"
+      />
+    </div>
+
+    <!-- Daftar Warga -->
+    <div id="listWarga" class="space-y-2.5">
+      <div class="text-center py-10 text-slate-500 text-sm">Memuat data warga dari Spreadsheet...</div>
+    </div>
+  </main>
+
+  <!-- Modal Input Setoran -->
+  <div id="modalInput" class="fixed inset-0 bg-slate-900/60 z-20 hidden items-end justify-center">
+    <div class="bg-white w-full max-w-md rounded-t-3xl p-5 pb-7 max-h-[92vh] overflow-y-auto animate-slide-up shadow-2xl">
+      
+      <!-- Header Modal -->
+      <div class="flex justify-between items-start mb-3">
+        <div>
+          <span id="mNoRumah" class="text-xs font-bold uppercase tracking-wider text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded">BLOK A-01</span>
+          <h2 id="mNamaWarga" class="text-xl font-bold mt-1">Nama Warga</h2>
+        </div>
+        <button onclick="tutupModal()" class="w-8 h-8 rounded-full bg-slate-200 text-slate-700 font-bold flex items-center justify-center">✕</button>
+      </div>
+
+      <!-- Info Status Saldo -->
+      <div id="mInfoSaldo" class="bg-slate-50 border border-slate-200 rounded-xl p-3 text-xs text-slate-700 leading-relaxed mb-4"></div>
+
+      <!-- Input 1: Uang Sampah -->
+      <div class="mb-4">
+        <label class="block text-sm font-bold text-slate-800 mb-2">1. Uang Sampah (Min. Rp7.000/minggu)</label>
+        <div class="grid grid-cols-4 gap-2 mb-2" id="chipsSampah">
+          <button type="button" onclick="pilihSampah(0, this)" class="chip-btn py-2.5 border border-slate-300 rounded-xl text-xs font-bold bg-white">Rp0</button>
+          <button type="button" onclick="pilihSampah(7000, this)" class="chip-btn py-2.5 border border-slate-300 rounded-xl text-xs font-bold bg-white">7rb (1m)</button>
+          <button type="button" onclick="pilihSampah(14000, this)" class="chip-btn py-2.5 border border-slate-300 rounded-xl text-xs font-bold bg-white">14rb (2m)</button>
+          <button type="button" onclick="pilihSampah(28000, this)" class="chip-btn py-2.5 border border-slate-300 rounded-xl text-xs font-bold bg-white">28rb (4m)</button>
+        </div>
+        <input
+          type="number"
+          id="inputSampah"
+          oninput="updatePreview()"
+          placeholder="Ketik nominal sampah (misal: 10000)"
+          class="w-full px-3.5 py-3 border border-slate-300 rounded-xl text-lg font-bold focus:outline-none focus:border-emerald-600"
+        />
+      </div>
+
+      <!-- Input 2: Uang Perelek -->
+      <div class="mb-4">
+        <label class="block text-sm font-bold text-slate-800 mb-2">2. Uang Perelek RT (Sukarela)</label>
+        <div class="grid grid-cols-4 gap-2 mb-2" id="chipsPerelek">
+          <button type="button" onclick="pilihPerelek(0, this)" class="chip-btn py-2.5 border border-slate-300 rounded-xl text-xs font-bold bg-white">Rp0</button>
+          <button type="button" onclick="pilihPerelek(2000, this)" class="chip-btn py-2.5 border border-slate-300 rounded-xl text-xs font-bold bg-white">2rb</button>
+          <button type="button" onclick="pilihPerelek(5000, this)" class="chip-btn py-2.5 border border-slate-300 rounded-xl text-xs font-bold bg-white">5rb</button>
+          <button type="button" onclick="pilihPerelek(10000, this)" class="chip-btn py-2.5 border border-slate-300 rounded-xl text-xs font-bold bg-white">10rb</button>
+        </div>
+        <input
+          type="number"
+          id="inputPerelek"
+          oninput="updatePreview()"
+          placeholder="Ketik nominal perelek"
+          class="w-full px-3.5 py-3 border border-slate-300 rounded-xl text-lg font-bold focus:outline-none focus:border-emerald-600"
+        />
+      </div>
+
+      <!-- Preview Kalkulasi -->
+      <div id="previewBox" class="bg-blue-50 border border-blue-200 text-blue-900 rounded-xl p-3 text-xs leading-relaxed mb-4">
+        Total uang diterima: <b>Rp0</b>
+      </div>
+
+      <!-- Tombol Simpan -->
+      <button
+        id="btnSimpan"
+        onclick="kirimData()"
+        class="w-full py-3.5 bg-emerald-600 hover:bg-emerald-700 active:scale-[0.99] text-white font-bold rounded-xl text-base shadow-md transition disabled:bg-slate-400"
+      >
+        Simpan Setoran
+      </button>
+
+      <!-- Zona Bahaya: Hapus Warga Pindah -->
+      <div class="mt-6 pt-4 border-t border-slate-200 text-center">
+        <button
+          id="btnHapusWarga"
+          type="button"
+          onclick="hapusWargaPindah()"
+          class="text-xs font-semibold text-red-600 hover:text-red-700 py-2 px-3 rounded-lg hover:bg-red-50 transition"
+        >
+          🗑️ Hapus Warga Ini (Pindah Rumah)
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Toast Notifikasi Bawah (Undo + Kirim Struk WA) -->
+  <div id="toastBox" class="fixed bottom-4 left-4 right-4 max-w-md mx-auto bg-slate-900 text-white px-4 py-3.5 rounded-2xl shadow-xl hidden justify-between items-center z-30">
+    <span id="toastText" class="text-xs font-medium pr-2">Tersimpan!</span>
+    <div class="flex gap-2 shrink-0">
+      <a id="btnWaLink" href="#" target="_blank" class="hidden bg-emerald-500 text-white px-3 py-1.5 rounded-lg text-xs font-bold">Kirim WA</a>
+      <button onclick="undoTransaksi()" class="bg-red-500 text-white px-3 py-1.5 rounded-lg text-xs font-bold">Batalkan</button>
+    </div>
+  </div>
+
+  <script>
+    // =========================================================================
+    // TEMPEL LINK WEB APP APPS SCRIPT (/exec) KAMU DI DALAM TANDA KUTIP DI BAWAH:
+    const API_URL = "https://script.google.com/macros/s/AKfycbypWK-8z3f3hF1RVSXeQfsGKchrY51lldFqjmZtiLHA4rFsvCB_A-HMWR3tK-fOSnQI/exec";
+    // =========================================================================
+
+    const TARIF = 7000;
+    let semuaWarga = [];
+    let wargaAktif = null;
+    let lastTrxId = null;
+
+    function formatRp(angka) {
+      return "Rp" + Number(angka || 0).toLocaleString("id-ID");
+    }
+
+    async function muatData() {
+      const container = document.getElementById("listWarga");
+      try {
+        const res = await fetch(API_URL);
+        const data = await res.json();
+        if (data.status === "sukses") {
+          semuaWarga = data.warga;
+          document.getElementById("kasHariIni").innerText = formatRp(data.kasHariIni);
+          renderWarga(semuaWarga);
+        } else {
+          container.innerHTML = `<div class="text-center py-8 text-red-600 text-sm">Gagal memuat data dari Spreadsheet.</div>`;
+        }
+      } catch (err) {
+        container.innerHTML = `<div class="text-center py-8 text-red-600 text-sm">Koneksi gagal. Pastikan API_URL sudah diisi dengan benar.</div>`;
+      }
+    }
+
+    function renderWarga(list) {
+      const container = document.getElementById("listWarga");
+      if (list.length === 0) {
+        container.innerHTML = `<div class="text-center py-8 text-slate-500 text-sm">Data warga tidak ditemukan.</div>`;
+        return;
+      }
+
+      container.innerHTML = list.map((w, idx) => {
+        const badgeText = w.sisaSaldo > 0
+          ? `${w.mingguLunas} Mgg + Saldo ${formatRp(w.sisaSaldo)}`
+          : `Lunas ${w.mingguLunas} Minggu`;
+        const badgeStyle = w.sisaSaldo > 0
+          ? "bg-amber-100 text-amber-800 border-amber-200"
+          : "bg-emerald-100 text-emerald-800 border-emerald-200";
+
+        return `
+          <div onclick="bukaModalById('${w.id}')" class="bg-white p-3.5 rounded-2xl border border-slate-200 shadow-sm flex justify-between items-center active:scale-[0.98] transition cursor-pointer">
+            <div>
+              <div class="font-bold text-base text-slate-900">${w.noRumah} — ${w.nama}</div>
+              <div class="text-xs text-slate-500 mt-0.5">Total Sampah: ${formatRp(w.totalSampah)} | Perelek: ${formatRp(w.totalPerelek)}</div>
+            </div>
+            <span class="px-2.5 py-1 rounded-lg text-xs font-bold border ${badgeStyle} text-right shrink-0 ml-2">
+              ${badgeText}
+            </span>
+          </div>
+        `;
+      }).join("");
+    }
+
+    function filterWarga() {
+      const q = document.getElementById("searchInput").value.toLowerCase();
+      const filtered = semuaWarga.filter(w =>
+        w.nama.toLowerCase().includes(q) || w.noRumah.toLowerCase().includes(q)
+      );
+      renderWarga(filtered);
+    }
+
+    function bukaModalById(id) {
+      const w = semuaWarga.find(item => item.id === id);
+      if (!w) return;
+      wargaAktif = w;
+
+      document.getElementById("mNoRumah").innerText = `${w.noRumah} • ID: ${w.id}`;
+      document.getElementById("mNamaWarga").innerText = w.nama;
+
+      let infoHtml = `Status saat ini: <b>${w.mingguLunas} minggu terbayar</b> (Total Sampah: ${formatRp(w.totalSampah)}).`;
+      if (w.sisaSaldo > 0) {
+        const kurang = TARIF - w.sisaSaldo;
+        infoHtml += `<br>Ada saldo cicilan/deposit <b>${formatRp(w.sisaSaldo)}</b> (kurang <b>${formatRp(kurang)}</b> untuk genap 1 minggu lagi).`;
+      }
+      document.getElementById("mInfoSaldo").innerHTML = infoHtml;
+
+      document.getElementById("inputSampah").value = "";
+      document.getElementById("inputPerelek").value = "";
+      resetChipStyles();
+      updatePreview();
+
+      const modal = document.getElementById("modalInput");
+      modal.classList.remove("hidden");
+      modal.classList.add("flex");
+    }
+
+    function tutupModal() {
+      const modal = document.getElementById("modalInput");
+      modal.classList.add("hidden");
+      modal.classList.remove("flex");
+    }
+
+    function resetChipStyles() {
+      document.querySelectorAll(".chip-btn").forEach(b => {
+        b.classList.remove("border-emerald-600", "bg-emerald-50", "text-emerald-800");
+        b.classList.add("border-slate-300", "bg-white");
+      });
+    }
+
+    function pilihSampah(nominal, btn) {
+      document.querySelectorAll("#chipsSampah .chip-btn").forEach(b => {
+        b.classList.remove("border-emerald-600", "bg-emerald-50", "text-emerald-800");
+        b.classList.add("border-slate-300", "bg-white");
+      });
+      btn.classList.remove("border-slate-300", "bg-white");
+      btn.classList.add("border-emerald-600", "bg-emerald-50", "text-emerald-800");
+      document.getElementById("inputSampah").value = nominal;
+      updatePreview();
+    }
+
+    function pilihPerelek(nominal, btn) {
+      document.querySelectorAll("#chipsPerelek .chip-btn").forEach(b => {
+        b.classList.remove("border-emerald-600", "bg-emerald-50", "text-emerald-800");
+        b.classList.add("border-slate-300", "bg-white");
+      });
+      btn.classList.remove("border-slate-300", "bg-white");
+      btn.classList.add("border-emerald-600", "bg-emerald-50", "text-emerald-800");
+      document.getElementById("inputPerelek").value = nominal;
+      updatePreview();
+    }
+
+    function updatePreview() {
+      const sampah = Number(document.getElementById("inputSampah").value) || 0;
+      const perelek = Number(document.getElementById("inputPerelek").value) || 0;
+      const total = sampah + perelek;
+
+      const totalSampahBaru = (wargaAktif ? wargaAktif.totalSampah : 0) + sampah;
+      const mingguBaru = Math.floor(totalSampahBaru / TARIF);
+      const sisaBaru = totalSampahBaru % TARIF;
+
+      let ketSampah = "";
+      if (sampah > 0 && sampah < TARIF && wargaAktif.sisaSaldo === 0) {
+        ketSampah = `<br><span class="text-amber-700 font-semibold">⚠️ Nominal di bawah Rp7.000 akan dicatat sebagai cicilan/deposit.</span>`;
+      } else if (sampah > 0) {
+        ketSampah = `<br>Status sampah baru: <b>${mingguBaru} minggu</b> + sisa saldo <b>${formatRp(sisaBaru)}</b>.`;
+      }
+
+      document.getElementById("previewBox").innerHTML = `
+        Total uang diterima: <b class="text-sm">${formatRp(total)}</b>
+        ${ketSampah}
+      `;
+    }
+
+    async function kirimData() {
+      const sampah = Number(document.getElementById("inputSampah").value) || 0;
+      const perelek = Number(document.getElementById("inputPerelek").value) || 0;
+
+      if (sampah + perelek <= 0) {
+        alert("Isi nominal Sampah atau Perelek terlebih dahulu!");
+        return;
+      }
+
+      const btn = document.getElementById("btnSimpan");
+      btn.disabled = true;
+      btn.innerText = "Menyimpan ke Spreadsheet...";
+
+      try {
+        const res = await fetch(API_URL, {
+          method: "POST",
+          body: JSON.stringify({
+            idWarga: wargaAktif.id,
+            noRumah: wargaAktif.noRumah,
+            namaWarga: wargaAktif.nama,
+            sampah: sampah,
+            perelek: perelek
+          })
+        });
+        const data = await res.json();
+
+        if (data.status === "sukses") {
+          tutupModal();
+          lastTrxId = data.idTransaksi;
+
+          const waBtn = document.getElementById("btnWaLink");
+          if (wargaAktif.noWa) {
+            const pesan = `Terima kasih *${wargaAktif.nama}* (${wargaAktif.noRumah}), pembayaran kas RT telah dicatat:\n- Sampah: ${formatRp(sampah)}\n- Perelek: ${formatRp(perelek)}\n- Total: *${formatRp(data.totalBayar)}*\nWaktu: ${data.waktu}`;
+            waBtn.href = `https://wa.me/${wargaAktif.noWa}?text=${encodeURIComponent(pesan)}`;
+            waBtn.classList.remove("hidden");
+          } else {
+            waBtn.classList.add("hidden");
+          }
+
+          document.getElementById("toastText").innerText = `Tersimpan ${formatRp(data.totalBayar)} (${wargaAktif.nama})`;
+          const toast = document.getElementById("toastBox");
+          toast.classList.remove("hidden");
+          toast.classList.add("flex");
+
+          await muatData();
+        } else {
+          alert("Gagal menyimpan: " + (data.pesan || "Error"));
+        }
+      } catch (err) {
+        alert("Terjadi kesalahan jaringan saat menyimpan.");
+      } finally {
+        btn.disabled = false;
+        btn.innerText = "Simpan Setoran";
+      }
+    }
+
+    async function undoTransaksi() {
+      if (!lastTrxId) return;
+      try {
+        const res = await fetch(API_URL, {
+          method: "POST",
+          body: JSON.stringify({ action: "undo", idTransaksi: lastTrxId })
+        });
+        const data = await res.json();
+        if (data.status === "sukses") {
+          const toast = document.getElementById("toastBox");
+          toast.classList.add("hidden");
+          toast.classList.remove("flex");
+          lastTrxId = null;
+          await muatData();
+        } else {
+          alert(data.pesan || "Gagal membatalkan transaksi.");
+        }
+      } catch (err) {
+        alert("Gagal terhubung ke server.");
+      }
+    }
+
+    async function hapusWargaPindah() {
+      if (!wargaAktif) return;
+
+      // Konfirmasi Ganda agar tidak salah hapus
+      const konfirmasi1 = confirm(`Yakin ingin menghapus ${wargaAktif.nama} (${wargaAktif.noRumah}) karena pindah rumah?\n\nSemua data profil dan riwayat setoran warga ini di Spreadsheet akan dihapus permanen.`);
+      if (!konfirmasi1) return;
+
+      const btn = document.getElementById("btnHapusWarga");
+      const teksAsli = btn.innerText;
+      btn.innerText = "Menghapus data warga...";
+      btn.disabled = true;
+
+      try {
+        const res = await fetch(API_URL, {
+          method: "POST",
+          body: JSON.stringify({
+            action: "hapus_warga",
+            idWarga: wargaAktif.id
+          })
+        });
+        const data = await res.json();
+
+        if (data.status === "sukses") {
+          tutupModal();
+          alert(`Data ${wargaAktif.nama} beserta seluruh riwayat transaksinya berhasil dihapus.`);
+          await muatData();
+        } else {
+          alert("Gagal menghapus warga: " + (data.pesan || "Error"));
+        }
+      } catch (err) {
+        alert("Terjadi kesalahan jaringan saat menghapus data.");
+      } finally {
+        btn.innerText = teksAsli;
+        btn.disabled = false;
+      }
+    }
+
+    window.onload = muatData;
+  </script>
+</body>
+</html>
