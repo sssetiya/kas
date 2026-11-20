@@ -224,7 +224,7 @@
     const API_URL = "https://script.google.com/macros/s/AKfycbypWK-8z3f3hF1RVSXeQfsGKchrY51lldFqjmZtiLHA4rFsvCB_A-HMWR3tK-fOSnQI/exec";
     // =========================================================================
 
-    const CACHE_KEY = "kas_rt03_mekarsari_v3";
+    const CACHE_KEY = "kas_rt03_mekarsari_v4";
     const NAMA_BULAN = ["Januari", "Februari", "Maret", "April", "Mei", "Juni", "Juli", "Agustus", "September", "Oktober", "November", "Desember"];
 
     let semuaWarga = [];
@@ -323,7 +323,7 @@
       }
     }
 
-    async function panggilServer(paramsObj, paksaRefresh = false) {
+    function panggilServer(paramsObj, paksaRefresh = false) {
       const container = document.getElementById("listWarga");
       const syncBadge = document.getElementById("syncBadge");
 
@@ -335,30 +335,64 @@
       }
 
       syncBadge.classList.remove("hidden");
-      const query = new URLSearchParams({ ...paramsObj, _ts: Date.now() }).toString();
 
-      try {
-        const res = await fetch(`${API_URL}?${query}`, { redirect: "follow" });
-        const data = await res.json();
+      return new Promise((resolve) => {
+        const cbName = "cb_kas_" + Date.now() + "_" + Math.floor(Math.random() * 1000);
+        const script = document.createElement("script");
+        let selesai = false;
 
-        if (data.status === "sukses") {
-          localStorage.setItem(CACHE_KEY, JSON.stringify(data));
-          terapkanDataKeLayar(data);
-          return data;
-        } else {
-          alert("Server gagal: " + (data.pesan || "Cek nama tab Spreadsheet"));
-          return null;
-        }
-      } catch (err) {
-        if (semuaWarga.length === 0) {
-          container.innerHTML = `<div class="text-center py-8 text-red-600 text-sm">Koneksi gagal. Pastikan API_URL sudah diisi dan tab Rekap_Sampah, Rekap_Perelek, Log_Transaksi sudah dibuat.</div>`;
-        } else {
-          alert("Koneksi ke Google Sheets terganggu: " + err.message);
-        }
-        return null;
-      } finally {
-        syncBadge.classList.add("hidden");
-      }
+        const timer = setTimeout(() => {
+          if (selesai) return;
+          selesai = true;
+          delete window[cbName];
+          if (script.parentNode) script.parentNode.removeChild(script);
+          syncBadge.classList.add("hidden");
+          alert("Waktu koneksi habis (12 detik). Silakan tekan Refresh untuk memastikan data.");
+          resolve(null);
+        }, 12000);
+
+        window[cbName] = function(data) {
+          if (selesai) return;
+          selesai = true;
+          clearTimeout(timer);
+          delete window[cbName];
+          if (script.parentNode) script.parentNode.removeChild(script);
+          syncBadge.classList.add("hidden");
+
+          if (data && data.status === "sukses") {
+            localStorage.setItem(CACHE_KEY, JSON.stringify(data));
+            terapkanDataKeLayar(data);
+            resolve(data);
+          } else {
+            alert("Server gagal: " + ((data && data.pesan) || "Cek konfigurasi"));
+            resolve(null);
+          }
+        };
+
+        script.onerror = function() {
+          if (selesai) return;
+          selesai = true;
+          clearTimeout(timer);
+          delete window[cbName];
+          if (script.parentNode) script.parentNode.removeChild(script);
+          syncBadge.classList.add("hidden");
+          if (semuaWarga.length === 0) {
+            container.innerHTML = `<div class="text-center py-8 text-red-600 text-sm">Koneksi gagal. Pastikan API_URL sudah diisi link /exec dan Apps Script sudah di-Deploy Versi Baru.</div>`;
+          } else {
+            alert("Gagal terhubung ke server Google Apps Script.");
+          }
+          resolve(null);
+        };
+
+        const query = new URLSearchParams({
+          ...paramsObj,
+          callback: cbName,
+          _ts: Date.now()
+        }).toString();
+
+        script.src = `${API_URL}?${query}`;
+        document.body.appendChild(script);
+      });
     }
 
     function setFilterStatus(status, btn) {
