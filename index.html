@@ -562,6 +562,7 @@
     }
 
     async function kirimData() {
+     async function kirimData() {
       const sampah = Number(document.getElementById("inputSampah").value) || 0;
       const perelek = Number(document.getElementById("inputPerelek").value) || 0;
       const totalBayar = sampah + perelek;
@@ -570,6 +571,36 @@
         alert("Isi nominal Kebersihan atau Perelek terlebih dahulu!");
         return;
       }
+
+      const btn = document.getElementById("btnSimpan");
+      btn.disabled = true;
+      btn.innerText = "Menyimpan ke Rekap Excel...";
+
+      const clientTrxId = "TRX-" + Date.now();
+      const targetWarga = { ...wargaAktif };
+
+      const data = await panggilServer({
+        action: "simpan",
+        idTrx: clientTrxId,
+        rowSampah: targetWarga.rowSampah,
+        rowPerelek: targetWarga.rowPerelek,
+        mingguKe: mingguAktif,
+        blok: targetWarga.blok,
+        nama: targetWarga.nama,
+        sampah: sampah,
+        perelek: perelek
+      });
+
+      btn.disabled = false;
+      btn.innerText = "Simpan Setoran";
+
+      if (data) {
+        tutupModal("modalInput");
+        lastTrxId = clientTrxId;
+        document.getElementById("toastText").innerText = `Tersimpan ${formatRp(totalBayar)} (${targetWarga.nama} - M${mingguAktif})`;
+        tampilkanToast();
+      }
+     }
 
       const btn = document.getElementById("btnSimpan");
       btn.disabled = true;
@@ -707,7 +738,7 @@
       }
     }
 
-    async function hapusWargaPindah() {
+   async function hapusWargaPindah() {
       if (!wargaAktif) return;
       const konfirmasi = confirm(`Yakin ingin menghapus ${wargaAktif.nama} (${wargaAktif.blok}) karena pindah rumah?\n\nNama dan nominal pada baris nomor ${wargaAktif.no} di kedua tabel akan dikosongkan.`);
       if (!konfirmasi) return;
@@ -719,7 +750,8 @@
 
       const data = await panggilServer({
         action: "hapus_warga",
-        rowNum: wargaAktif.rowNum
+        rowSampah: wargaAktif.rowSampah,
+        rowPerelek: wargaAktif.rowPerelek
       });
 
       btn.innerText = teksAsli;
