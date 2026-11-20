@@ -27,7 +27,7 @@
           </div>
           <p class="text-xs text-emerald-100">Target 5 Minggu: Sampah 15rb • Perelek 10rb</p>
         </div>
-        <button onclick="muatData(true)" class="bg-white/20 hover:bg-white/30 active:scale-95 transition px-3 py-1.5 rounded-lg text-xs font-semibold">
+        <button onclick="panggilServer({ action: 'read' }, true)" class="bg-white/20 hover:bg-white/30 active:scale-95 transition px-3 py-1.5 rounded-lg text-xs font-semibold">
           ↻ Refresh
         </button>
       </div>
@@ -47,7 +47,6 @@
 
   <!-- Konten Utama -->
   <main class="max-w-md mx-auto p-4">
-    <!-- Pencarian & Filter Status -->
     <div class="mb-3 space-y-2">
       <input
         type="text"
@@ -63,7 +62,6 @@
       </div>
     </div>
 
-    <!-- Daftar Warga -->
     <div id="listWarga" class="space-y-2.5">
       <div class="text-center py-10 text-slate-500 text-sm">Memuat data warga dari Spreadsheet...</div>
     </div>
@@ -81,7 +79,6 @@
         <button onclick="tutupModal('modalInput')" class="w-8 h-8 rounded-full bg-slate-200 text-slate-700 font-bold flex items-center justify-center">✕</button>
       </div>
 
-      <!-- Info Sisa Kekurangan -->
       <div id="mInfoSaldo" class="bg-slate-50 border border-slate-200 rounded-xl p-3 text-xs text-slate-700 leading-relaxed mb-4"></div>
 
       <!-- Input 1: Uang Sampah (Target 15k) -->
@@ -126,7 +123,6 @@
         />
       </div>
 
-      <!-- Preview Kalkulasi -->
       <div id="previewBox" class="bg-blue-50 border border-blue-200 text-blue-900 rounded-xl p-3 text-xs leading-relaxed mb-4">
         Total uang diterima: <b>Rp0</b>
       </div>
@@ -139,7 +135,6 @@
         Simpan Setoran
       </button>
 
-      <!-- Hapus Warga Pindah -->
       <div class="mt-6 pt-4 border-t border-slate-200 text-center">
         <button
           id="btnHapusWarga"
@@ -185,12 +180,12 @@
 
     const TARGET_SAMPAH = 15000;
     const TARGET_PERELEK = 10000;
-    const CACHE_KEY = "kas_rt_cache_v1";
+    const CACHE_KEY = "kas_rt_cache_v2";
 
     let semuaWarga = [];
     let logHariIni = [];
     let wargaAktif = null;
-    let lastTrxId = null;
+    let lastTrx = null; // Menyimpan { idTrx, idWarga } transaksi terakhir
     let statusFilter = "semua";
     let toastTimer = null;
 
@@ -214,19 +209,7 @@
       toast.classList.remove("hidden");
       toast.classList.add("flex");
       if (toastTimer) clearTimeout(toastTimer);
-      toastTimer = setTimeout(() => {
-        tutupToast();
-      }, 10000);
-    }
-
-    async function postAppsScript(payloadObj) {
-      const res = await fetch(API_URL, {
-        method: "POST",
-        redirect: "follow",
-        headers: { "Content-Type": "text/plain;charset=utf-8" },
-        body: JSON.stringify(payloadObj)
-      });
-      return await res.json();
+      toastTimer = setTimeout(() => tutupToast(), 12000);
     }
 
     function terapkanDataKeLayar(data) {
@@ -247,42 +230,40 @@
       renderRiwayat();
     }
 
-    async function muatData(paksaRefresh = false) {
+    // Jalur tunggal GET anti-CORS untuk semua aksi (read, simpan, hapus_transaksi, hapus_warga)
+    async function panggilServer(paramsObj, paksaRefresh = false) {
       const container = document.getElementById("listWarga");
       const syncBadge = document.getElementById("syncBadge");
 
-      // 1. Tampilkan cache lokal secara instan (0 detik) jika tersedia
-      const cachedRaw = localStorage.getItem(CACHE_KEY);
-      if (cachedRaw && !paksaRefresh) {
-        try {
-          terapkanDataKeLayar(JSON.parse(cachedRaw));
-        } catch (e) {}
+      if (paramsObj.action === "read" && !paksaRefresh) {
+        const cachedRaw = localStorage.getItem(CACHE_KEY);
+        if (cachedRaw) {
+          try { terapkanDataKeLayar(JSON.parse(cachedRaw)); } catch (e) {}
+        }
       }
 
-      // 2. Sinkronisasi data terbaru dari Google Sheets di latar belakang
       syncBadge.classList.remove("hidden");
-      const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 15000); // Batas maksimal 15 detik
+      const query = new URLSearchParams({ ...paramsObj, _ts: Date.now() }).toString();
 
       try {
-        const res = await fetch(API_URL + "?t=" + Date.now(), {
-          redirect: "follow",
-          signal: controller.signal
-        });
-        clearTimeout(timeoutId);
+        const res = await fetch(`${API_URL}?${query}`, { redirect: "follow" });
         const data = await res.json();
 
         if (data.status === "sukses") {
           localStorage.setItem(CACHE_KEY, JSON.stringify(data));
           terapkanDataKeLayar(data);
-        } else if (!cachedRaw) {
-          container.innerHTML = `<div class="text-center py-8 text-red-600 text-sm">Gagal memuat data: ${data.pesan || 'Cek nama tab Spreadsheet'}</div>`;
+          return data;
+        } else {
+          alert("Server merespons gagal: " + (data.pesan || "Cek konfigurasi"));
+          return null;
         }
       } catch (err) {
-        clearTimeout(timeoutId);
-        if (!cachedRaw) {
-          container.innerHTML = `<div class="text-center py-8 text-red-600 text-sm">Koneksi lambat atau API_URL belum diisi. Klik Refresh di pojok kanan atas.</div>`;
+        if (semuaWarga.length === 0) {
+          container.innerHTML = `<div class="text-center py-8 text-red-600 text-sm">Koneksi gagal. Pastikan API_URL benar dan Apps Script sudah di-Deploy (Siapa saja).</div>`;
+        } else {
+          alert("Koneksi ke Google Sheets terganggu. Coba klik Refresh.");
         }
+        return null;
       } finally {
         syncBadge.classList.add("hidden");
       }
@@ -461,8 +442,9 @@
     async function kirimData() {
       const sampah = Number(document.getElementById("inputSampah").value) || 0;
       const perelek = Number(document.getElementById("inputPerelek").value) || 0;
+      const totalBayar = sampah + perelek;
 
-      if (sampah + perelek <= 0) {
+      if (totalBayar <= 0) {
         alert("Isi nominal Sampah atau Perelek terlebih dahulu!");
         return;
       }
@@ -472,71 +454,58 @@
       btn.innerText = "Menyimpan ke Spreadsheet...";
 
       const clientTrxId = "TRX-" + Date.now();
+      const targetWarga = { ...wargaAktif };
 
-      try {
-        const data = await postAppsScript({
-          idTransaksi: clientTrxId,
-          idWarga: wargaAktif.id,
-          noRumah: wargaAktif.noRumah,
-          namaWarga: wargaAktif.nama,
-          sampah: sampah,
-          perelek: perelek
-        });
+      const data = await panggilServer({
+        action: "simpan",
+        idTrx: clientTrxId,
+        idWarga: targetWarga.id,
+        noRumah: targetWarga.noRumah,
+        namaWarga: targetWarga.nama,
+        sampah: sampah,
+        perelek: perelek
+      });
 
-        if (data.status === "sukses") {
-          tutupModal("modalInput");
-          lastTrxId = data.idTransaksi || clientTrxId;
+      btn.disabled = false;
+      btn.innerText = "Simpan Setoran";
 
-          const waBtn = document.getElementById("btnWaLink");
-          if (wargaAktif.noWa) {
-            const pesan = `Terima kasih *${wargaAktif.nama}* (${wargaAktif.noRumah}), pembayaran kas RT telah dicatat:\n- Sampah: ${formatRp(sampah)}\n- Perelek: ${formatRp(perelek)}\n- Total: *${formatRp(data.totalBayar)}*\nWaktu: ${data.waktu}`;
-            waBtn.href = `https://wa.me/${wargaAktif.noWa}?text=${encodeURIComponent(pesan)}`;
-            waBtn.classList.remove("hidden");
-          } else {
-            waBtn.classList.add("hidden");
-          }
+      if (data) {
+        tutupModal("modalInput");
+        lastTrx = { idTrx: clientTrxId, idWarga: targetWarga.id };
 
-          document.getElementById("toastText").innerText = `Tersimpan ${formatRp(data.totalBayar)} (${wargaAktif.nama})`;
-          tampilkanToast();
-
-          await muatData(true);
+        const waBtn = document.getElementById("btnWaLink");
+        if (targetWarga.noWa) {
+          const pesan = `Terima kasih *${targetWarga.nama}* (${targetWarga.noRumah}), pembayaran kas RT telah dicatat:\n- Sampah: ${formatRp(sampah)}\n- Perelek: ${formatRp(perelek)}\n- Total: *${formatRp(totalBayar)}*\nWaktu: ${data.waktuServer || ''}`;
+          waBtn.href = `https://wa.me/${targetWarga.noWa}?text=${encodeURIComponent(pesan)}`;
+          waBtn.classList.remove("hidden");
         } else {
-          alert("Gagal menyimpan: " + (data.pesan || "Error"));
+          waBtn.classList.add("hidden");
         }
-      } catch (err) {
-        alert("Terjadi kesalahan jaringan saat menyimpan: " + err.message);
-      } finally {
-        btn.disabled = false;
-        btn.innerText = "Simpan Setoran";
+
+        document.getElementById("toastText").innerText = `Tersimpan ${formatRp(totalBayar)} (${targetWarga.nama})`;
+        tampilkanToast();
       }
     }
 
     async function batalkanTerakhir() {
-      if (!lastTrxId) return;
+      if (!lastTrx) return;
       const btnUndo = document.getElementById("btnUndoToast");
       btnUndo.disabled = true;
       btnUndo.innerText = "Menghapus...";
       if (toastTimer) clearTimeout(toastTimer);
 
-      try {
-        const data = await postAppsScript({
-          action: "hapus_transaksi",
-          idTransaksi: lastTrxId
-        });
+      const data = await panggilServer({
+        action: "hapus_transaksi",
+        idTrx: lastTrx.idTrx,
+        idWarga: lastTrx.idWarga
+      });
 
-        if (data.status === "sukses") {
-          tutupToast();
-          lastTrxId = null;
-          await muatData(true);
-        } else {
-          btnUndo.disabled = false;
-          btnUndo.innerText = "Batalkan";
-          alert("Gagal membatalkan: " + (data.pesan || "Error"));
-        }
-      } catch (err) {
+      if (data) {
+        tutupToast();
+        lastTrx = null;
+      } else {
         btnUndo.disabled = false;
         btnUndo.innerText = "Batalkan";
-        alert("Gagal terhubung ke server saat membatalkan.");
       }
     }
 
@@ -563,7 +532,7 @@
           </div>
           <button
             type="button"
-            onclick="hapusDariRiwayat('${item.idTrx}', this)"
+            onclick="hapusDariRiwayat('${item.idTrx}', '${item.idWarga}', this)"
             class="bg-red-100 text-red-700 hover:bg-red-200 disabled:opacity-50 px-3 py-1.5 rounded-lg text-xs font-bold shrink-0 ml-2"
           >
             Hapus
@@ -572,29 +541,21 @@
       `).join("");
     }
 
-    async function hapusDariRiwayat(idTrx, btnEl) {
-      if (!idTrx) return;
+    async function hapusDariRiwayat(idTrx, idWarga, btnEl) {
       if (!confirm("Hapus transaksi ini dari catatan?")) return;
 
       btnEl.disabled = true;
       btnEl.innerText = "Menghapus...";
 
-      try {
-        const data = await postAppsScript({
-          action: "hapus_transaksi",
-          idTransaksi: idTrx
-        });
-        if (data.status === "sukses") {
-          await muatData(true);
-        } else {
-          btnEl.disabled = false;
-          btnEl.innerText = "Hapus";
-          alert("Gagal menghapus: " + (data.pesan || "Error"));
-        }
-      } catch (err) {
+      const data = await panggilServer({
+        action: "hapus_transaksi",
+        idTrx: idTrx,
+        idWarga: idWarga
+      });
+
+      if (!data) {
         btnEl.disabled = false;
         btnEl.innerText = "Hapus";
-        alert("Gagal terhubung ke server.");
       }
     }
 
@@ -608,28 +569,21 @@
       btn.innerText = "Menghapus data warga...";
       btn.disabled = true;
 
-      try {
-        const data = await postAppsScript({
-          action: "hapus_warga",
-          idWarga: wargaAktif.id
-        });
+      const data = await panggilServer({
+        action: "hapus_warga",
+        idWarga: wargaAktif.id
+      });
 
-        if (data.status === "sukses") {
-          tutupModal("modalInput");
-          alert(`Data ${wargaAktif.nama} beserta seluruh riwayat transaksinya berhasil dihapus.`);
-          await muatData(true);
-        } else {
-          alert("Gagal menghapus warga: " + (data.pesan || "Error"));
-        }
-      } catch (err) {
-        alert("Terjadi kesalahan jaringan saat menghapus data.");
-      } finally {
-        btn.innerText = teksAsli;
-        btn.disabled = false;
+      btn.innerText = teksAsli;
+      btn.disabled = false;
+
+      if (data) {
+        tutupModal("modalInput");
+        alert(`Data ${wargaAktif.nama} beserta seluruh riwayat transaksinya berhasil dihapus.`);
       }
     }
 
-    window.onload = () => muatData(false);
+    window.onload = () => panggilServer({ action: "read" }, false);
   </script>
 </body>
 </html>
