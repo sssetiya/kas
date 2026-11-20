@@ -150,7 +150,7 @@
     </div>
   </div>
 
-  <!-- Modal Riwayat Transaksi Hari Ini (Bisa Hapus Salah Input Kapan Saja) -->
+  <!-- Modal Riwayat Transaksi Hari Ini -->
   <div id="modalRiwayat" class="fixed inset-0 bg-slate-900/60 z-20 hidden items-end justify-center">
     <div class="bg-white w-full max-w-md rounded-t-3xl p-5 pb-7 max-h-[85vh] overflow-y-auto animate-slide-up shadow-2xl">
       <div class="flex justify-between items-center mb-3">
@@ -167,9 +167,10 @@
   <!-- Toast Notifikasi Bawah -->
   <div id="toastBox" class="fixed bottom-4 left-4 right-4 max-w-md mx-auto bg-slate-900 text-white px-4 py-3.5 rounded-2xl shadow-xl hidden justify-between items-center z-30">
     <span id="toastText" class="text-xs font-medium pr-2">Tersimpan!</span>
-    <div class="flex gap-2 shrink-0">
+    <div class="flex items-center gap-2 shrink-0">
       <a id="btnWaLink" href="#" target="_blank" class="hidden bg-emerald-500 text-white px-3 py-1.5 rounded-lg text-xs font-bold">Kirim WA</a>
-      <button onclick="hapusTransaksiById(lastTrxId, true)" class="bg-red-500 text-white px-3 py-1.5 rounded-lg text-xs font-bold">Batalkan</button>
+      <button id="btnUndoToast" type="button" onclick="batalkanTerakhir()" class="bg-red-500 hover:bg-red-600 disabled:bg-slate-600 text-white px-3 py-1.5 rounded-lg text-xs font-bold">Batalkan</button>
+      <button type="button" onclick="tutupToast()" aria-label="Tutup notifikasi" class="w-7 h-7 rounded-lg bg-slate-700 hover:bg-slate-600 text-slate-200 font-bold text-xs flex items-center justify-center">✕</button>
     </div>
   </div>
 
@@ -186,18 +187,60 @@
     let wargaAktif = null;
     let lastTrxId = null;
     let statusFilter = "semua";
+    let toastTimer = null;
 
     function formatRp(angka) {
       return "Rp" + Number(angka || 0).toLocaleString("id-ID");
     }
 
+    function tutupToast() {
+      const toast = document.getElementById("toastBox");
+      toast.classList.add("hidden");
+      toast.classList.remove("flex");
+      if (toastTimer) clearTimeout(toastTimer);
+    }
+
+    function tampilkanToast() {
+      const toast = document.getElementById("toastBox");
+      const btnUndo = document.getElementById("btnUndoToast");
+      btnUndo.disabled = false;
+      btnUndo.innerText = "Batalkan";
+
+      toast.classList.remove("hidden");
+      toast.classList.add("flex");
+      if (toastTimer) clearTimeout(toastTimer);
+      toastTimer = setTimeout(() => {
+        tutupToast();
+      }, 10000);
+    }
+
+    // Helper khusus mengirim POST ke Google Apps Script agar aman dari CORS Redirect
+    async function postAppsScript(payloadObj) {
+      const res = await fetch(API_URL, {
+        method: "POST",
+        redirect: "follow",
+        headers: { "Content-Type": "text/plain;charset=utf-8" },
+        body: JSON.stringify(payloadObj)
+      });
+      return await res.json();
+    }
+
     async function muatData() {
       const container = document.getElementById("listWarga");
       try {
-        const res = await fetch(API_URL);
+        const res = await fetch(API_URL + "?t=" + Date.now(), { redirect: "follow" });
         const data = await res.json();
         if (data.status === "sukses") {
-          semuaWarga = data.warga;
+          semuaWarga = (data.warga || []).map(w => {
+            const sisaSampah = Math.max(0, TARGET_SAMPAH - (Number(w.totalSampah) || 0));
+            const sisaPerelek = Math.max(0, TARGET_PERELEK - (Number(w.totalPerelek) || 0));
+            return {
+              ...w,
+              sisaSampah,
+              sisaPerelek,
+              isLunas: sisaSampah === 0 && sisaPerelek === 0
+            };
+          });
           logHariIni = data.logHariIni || [];
           document.getElementById("kasHariIni").innerText = formatRp(data.kasHariIni);
           document.getElementById("countLog").innerText = logHariIni.length;
@@ -241,17 +284,17 @@
       }
 
       container.innerHTML = list.map(w => {
+        const totalKurang = w.sisaSampah + w.sisaPerelek;
         let badgeText = "";
         let badgeStyle = "";
 
-        if (w.isLunas) {
+        if (w.isLunas || totalKurang <= 0) {
           badgeText = "✅ LUNAS";
           badgeStyle = "bg-emerald-100 text-emerald-800 border-emerald-200";
-        } else if (w.totalSampah === 0 && w.totalPerelek === 0) {
+        } else if ((Number(w.totalSampah) || 0) === 0 && (Number(w.totalPerelek) || 0) === 0) {
           badgeText = "Belum Bayar";
           badgeStyle = "bg-red-100 text-red-700 border-red-200";
         } else {
-          const totalKurang = w.sisaSampah + w.sisaPerelek;
           badgeText = `Kurang ${formatRp(totalKurang)}`;
           badgeStyle = "bg-amber-100 text-amber-800 border-amber-200";
         }
@@ -394,22 +437,22 @@
       btn.disabled = true;
       btn.innerText = "Menyimpan ke Spreadsheet...";
 
+      // Buat ID unik langsung di client agar pasti sinkron saat dibatalkan
+      const clientTrxId = "TRX-" + Date.now();
+
       try {
-        const res = await fetch(API_URL, {
-          method: "POST",
-          body: JSON.stringify({
-            idWarga: wargaAktif.id,
-            noRumah: wargaAktif.noRumah,
-            namaWarga: wargaAktif.nama,
-            sampah: sampah,
-            perelek: perelek
-          })
+        const data = await postAppsScript({
+          idTransaksi: clientTrxId,
+          idWarga: wargaAktif.id,
+          noRumah: wargaAktif.noRumah,
+          namaWarga: wargaAktif.nama,
+          sampah: sampah,
+          perelek: perelek
         });
-        const data = await res.json();
 
         if (data.status === "sukses") {
           tutupModal("modalInput");
-          lastTrxId = data.idTransaksi;
+          lastTrxId = data.idTransaksi || clientTrxId;
 
           const waBtn = document.getElementById("btnWaLink");
           if (wargaAktif.noWa) {
@@ -421,115 +464,28 @@
           }
 
           document.getElementById("toastText").innerText = `Tersimpan ${formatRp(data.totalBayar)} (${wargaAktif.nama})`;
-          const toast = document.getElementById("toastBox");
-          toast.classList.remove("hidden");
-          toast.classList.add("flex");
+          tampilkanToast();
 
           await muatData();
         } else {
           alert("Gagal menyimpan: " + (data.pesan || "Error"));
         }
       } catch (err) {
-        alert("Terjadi kesalahan jaringan saat menyimpan.");
+        alert("Terjadi kesalahan jaringan saat menyimpan: " + err.message);
       } finally {
         btn.disabled = false;
         btn.innerText = "Simpan Setoran";
       }
     }
 
-    function bukaRiwayat() {
-      renderRiwayat();
-      const modal = document.getElementById("modalRiwayat");
-      modal.classList.remove("hidden");
-      modal.classList.add("flex");
-    }
-
-    function renderRiwayat() {
-      const listEl = document.getElementById("listRiwayat");
-      if (logHariIni.length === 0) {
-        listEl.innerHTML = `<div class="text-center py-8 text-slate-400 text-xs">Belum ada transaksi masuk hari ini.</div>`;
-        return;
-      }
-
-      listEl.innerHTML = logHariIni.map(item => `
-        <div class="p-3 bg-slate-50 border border-slate-200 rounded-xl flex justify-between items-center">
-          <div>
-            <div class="text-xs text-slate-400 font-semibold">${item.jam} • ${item.noRumah}</div>
-            <div class="font-bold text-sm text-slate-800">${item.namaWarga}</div>
-            <div class="text-xs text-slate-600">Sampah ${formatRp(item.sampah)} + Perelek ${formatRp(item.perelek)} = <b>${formatRp(item.total)}</b></div>
-          </div>
-          <button
-            onclick="hapusTransaksiById('${item.idTrx}', false)"
-            class="bg-red-100 text-red-700 hover:bg-red-200 px-3 py-1.5 rounded-lg text-xs font-bold shrink-0 ml-2"
-          >
-            Hapus
-          </button>
-        </div>
-      `).join("");
-    }
-
-    async function hapusTransaksiById(idTrx, dariToast) {
-      if (!idTrx) return;
-      if (!dariToast && !confirm("Hapus transaksi ini dari catatan?")) return;
+    async function batalkanTerakhir() {
+      if (!lastTrxId) return;
+      const btnUndo = document.getElementById("btnUndoToast");
+      btnUndo.disabled = true;
+      btnUndo.innerText = "Menghapus...";
+      if (toastTimer) clearTimeout(toastTimer);
 
       try {
-        const res = await fetch(API_URL, {
-          method: "POST",
-          body: JSON.stringify({ action: "hapus_transaksi", idTransaksi: idTrx })
-        });
-        const data = await res.json();
-        if (data.status === "sukses") {
-          if (dariToast) {
-            const toast = document.getElementById("toastBox");
-            toast.classList.add("hidden");
-            toast.classList.remove("flex");
-            lastTrxId = null;
-          }
-          await muatData();
-        } else {
-          alert(data.pesan || "Gagal menghapus transaksi.");
-        }
-      } catch (err) {
-        alert("Gagal terhubung ke server.");
-      }
-    }
-
-    async function hapusWargaPindah() {
-      if (!wargaAktif) return;
-      const konfirmasi = confirm(`Yakin ingin menghapus ${wargaAktif.nama} (${wargaAktif.noRumah}) karena pindah rumah?\n\nSemua data profil dan riwayat setoran warga ini di Spreadsheet akan dihapus permanen.`);
-      if (!konfirmasi) return;
-
-      const btn = document.getElementById("btnHapusWarga");
-      const teksAsli = btn.innerText;
-      btn.innerText = "Menghapus data warga...";
-      btn.disabled = true;
-
-      try {
-        const res = await fetch(API_URL, {
-          method: "POST",
-          body: JSON.stringify({
-            action: "hapus_warga",
-            idWarga: wargaAktif.id
-          })
-        });
-        const data = await res.json();
-
-        if (data.status === "sukses") {
-          tutupModal("modalInput");
-          alert(`Data ${wargaAktif.nama} beserta seluruh riwayat transaksinya berhasil dihapus.`);
-          await muatData();
-        } else {
-          alert("Gagal menghapus warga: " + (data.pesan || "Error"));
-        }
-      } catch (err) {
-        alert("Terjadi kesalahan jaringan saat menghapus data.");
-      } finally {
-        btn.innerText = teksAsli;
-        btn.disabled = false;
-      }
-    }
-
-    window.onload = muatData;
-  </script>
-</body>
-</html>
+        const data = await postAppsScript({
+          action: "hapus_transaksi",
+          idTransaksi: lastTr
