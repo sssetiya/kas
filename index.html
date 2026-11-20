@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
-  <title>Penagihan Kas RT - Sampah & Perelek</title>
+  <title>Penagihan Kas RT - Sampah 15k & Perelek 10k</title>
   <script src="https://cdn.tailwindcss.com"></script>
   <style>
     body { -webkit-tap-highlight-color: transparent; }
@@ -22,24 +22,30 @@
       <div class="flex justify-between items-center">
         <div>
           <h1 class="text-lg font-bold tracking-tight">Penagihan Kas RT</h1>
-          <p class="text-xs text-emerald-100">Sampah (Rp7rb/mgg) & Perelek</p>
+          <p class="text-xs text-emerald-100">Target 5 Minggu: Sampah 15rb • Perelek 10rb</p>
         </div>
         <button onclick="muatData()" class="bg-white/20 hover:bg-white/30 active:scale-95 transition px-3 py-1.5 rounded-lg text-xs font-semibold">
           ↻ Refresh
         </button>
       </div>
 
+      <!-- Kas Hari Ini + Tombol Riwayat -->
       <div class="mt-3 bg-emerald-700/70 border border-emerald-500/40 rounded-xl p-3 flex justify-between items-center">
-        <span class="text-xs font-medium text-emerald-100">Uang Terkumpul Hari Ini:</span>
-        <span id="kasHariIni" class="text-lg font-extrabold tracking-wide">Rp0</span>
+        <div>
+          <span class="block text-[11px] font-medium text-emerald-100">Uang Terkumpul Hari Ini:</span>
+          <span id="kasHariIni" class="text-lg font-extrabold tracking-wide">Rp0</span>
+        </div>
+        <button onclick="bukaRiwayat()" class="bg-white text-emerald-800 px-3 py-1.5 rounded-lg text-xs font-bold shadow-sm active:scale-95 transition">
+          📋 Riwayat (<span id="countLog">0</span>)
+        </button>
       </div>
     </div>
   </header>
 
   <!-- Konten Utama -->
   <main class="max-w-md mx-auto p-4">
-    <!-- Pencarian -->
-    <div class="mb-3">
+    <!-- Pencarian & Filter Status -->
+    <div class="mb-3 space-y-2">
       <input
         type="text"
         id="searchInput"
@@ -47,6 +53,11 @@
         placeholder="🔍 Cari nama warga atau blok rumah..."
         class="w-full px-4 py-3 bg-white border border-slate-300 rounded-xl text-base shadow-sm focus:outline-none focus:border-emerald-600"
       />
+      <div class="flex gap-1.5 text-xs font-bold">
+        <button onclick="setFilterStatus('semua', this)" class="filter-tab flex-1 py-2 rounded-lg bg-emerald-600 text-white">Semua</button>
+        <button onclick="setFilterStatus('belum', this)" class="filter-tab flex-1 py-2 rounded-lg bg-white text-slate-600 border border-slate-200">Belum Lunas</button>
+        <button onclick="setFilterStatus('lunas', this)" class="filter-tab flex-1 py-2 rounded-lg bg-white text-slate-600 border border-slate-200">Lunas</button>
+      </div>
     </div>
 
     <!-- Daftar Warga -->
@@ -59,50 +70,55 @@
   <div id="modalInput" class="fixed inset-0 bg-slate-900/60 z-20 hidden items-end justify-center">
     <div class="bg-white w-full max-w-md rounded-t-3xl p-5 pb-7 max-h-[92vh] overflow-y-auto animate-slide-up shadow-2xl">
       
-      <!-- Header Modal -->
       <div class="flex justify-between items-start mb-3">
         <div>
           <span id="mNoRumah" class="text-xs font-bold uppercase tracking-wider text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded">BLOK A-01</span>
           <h2 id="mNamaWarga" class="text-xl font-bold mt-1">Nama Warga</h2>
         </div>
-        <button onclick="tutupModal()" class="w-8 h-8 rounded-full bg-slate-200 text-slate-700 font-bold flex items-center justify-center">✕</button>
+        <button onclick="tutupModal('modalInput')" class="w-8 h-8 rounded-full bg-slate-200 text-slate-700 font-bold flex items-center justify-center">✕</button>
       </div>
 
-      <!-- Info Status Saldo -->
+      <!-- Info Sisa Kekurangan -->
       <div id="mInfoSaldo" class="bg-slate-50 border border-slate-200 rounded-xl p-3 text-xs text-slate-700 leading-relaxed mb-4"></div>
 
-      <!-- Input 1: Uang Sampah -->
+      <!-- Input 1: Uang Sampah (Target 15k) -->
       <div class="mb-4">
-        <label class="block text-sm font-bold text-slate-800 mb-2">1. Uang Sampah (Min. Rp7.000/minggu)</label>
+        <div class="flex justify-between items-center mb-2">
+          <label class="text-sm font-bold text-slate-800">1. Uang Sampah (Target Rp15.000)</label>
+          <button type="button" id="btnLunasiSampah" onclick="isiSisaSampah()" class="text-xs font-bold text-emerald-700 bg-emerald-100 px-2 py-1 rounded-md">Isi Sisa</button>
+        </div>
         <div class="grid grid-cols-4 gap-2 mb-2" id="chipsSampah">
           <button type="button" onclick="pilihSampah(0, this)" class="chip-btn py-2.5 border border-slate-300 rounded-xl text-xs font-bold bg-white">Rp0</button>
-          <button type="button" onclick="pilihSampah(7000, this)" class="chip-btn py-2.5 border border-slate-300 rounded-xl text-xs font-bold bg-white">7rb (1m)</button>
-          <button type="button" onclick="pilihSampah(14000, this)" class="chip-btn py-2.5 border border-slate-300 rounded-xl text-xs font-bold bg-white">14rb (2m)</button>
-          <button type="button" onclick="pilihSampah(28000, this)" class="chip-btn py-2.5 border border-slate-300 rounded-xl text-xs font-bold bg-white">28rb (4m)</button>
+          <button type="button" onclick="pilihSampah(3000, this)" class="chip-btn py-2.5 border border-slate-300 rounded-xl text-xs font-bold bg-white">3rb (1m)</button>
+          <button type="button" onclick="pilihSampah(6000, this)" class="chip-btn py-2.5 border border-slate-300 rounded-xl text-xs font-bold bg-white">6rb (2m)</button>
+          <button type="button" onclick="pilihSampah(15000, this)" class="chip-btn py-2.5 border border-slate-300 rounded-xl text-xs font-bold bg-white">15rb (Lunas)</button>
         </div>
         <input
           type="number"
           id="inputSampah"
           oninput="updatePreview()"
-          placeholder="Ketik nominal sampah (misal: 10000)"
+          placeholder="Ketik nominal cicilan sampah..."
           class="w-full px-3.5 py-3 border border-slate-300 rounded-xl text-lg font-bold focus:outline-none focus:border-emerald-600"
         />
       </div>
 
-      <!-- Input 2: Uang Perelek -->
+      <!-- Input 2: Uang Perelek (Target 10k) -->
       <div class="mb-4">
-        <label class="block text-sm font-bold text-slate-800 mb-2">2. Uang Perelek RT (Sukarela)</label>
+        <div class="flex justify-between items-center mb-2">
+          <label class="text-sm font-bold text-slate-800">2. Uang Perelek (Target Rp10.000)</label>
+          <button type="button" id="btnLunasiPerelek" onclick="isiSisaPerelek()" class="text-xs font-bold text-emerald-700 bg-emerald-100 px-2 py-1 rounded-md">Isi Sisa</button>
+        </div>
         <div class="grid grid-cols-4 gap-2 mb-2" id="chipsPerelek">
           <button type="button" onclick="pilihPerelek(0, this)" class="chip-btn py-2.5 border border-slate-300 rounded-xl text-xs font-bold bg-white">Rp0</button>
-          <button type="button" onclick="pilihPerelek(2000, this)" class="chip-btn py-2.5 border border-slate-300 rounded-xl text-xs font-bold bg-white">2rb</button>
+          <button type="button" onclick="pilihPerelek(2000, this)" class="chip-btn py-2.5 border border-slate-300 rounded-xl text-xs font-bold bg-white">2rb (1m)</button>
           <button type="button" onclick="pilihPerelek(5000, this)" class="chip-btn py-2.5 border border-slate-300 rounded-xl text-xs font-bold bg-white">5rb</button>
-          <button type="button" onclick="pilihPerelek(10000, this)" class="chip-btn py-2.5 border border-slate-300 rounded-xl text-xs font-bold bg-white">10rb</button>
+          <button type="button" onclick="pilihPerelek(10000, this)" class="chip-btn py-2.5 border border-slate-300 rounded-xl text-xs font-bold bg-white">10rb (Lunas)</button>
         </div>
         <input
           type="number"
           id="inputPerelek"
           oninput="updatePreview()"
-          placeholder="Ketik nominal perelek"
+          placeholder="Ketik nominal cicilan perelek..."
           class="w-full px-3.5 py-3 border border-slate-300 rounded-xl text-lg font-bold focus:outline-none focus:border-emerald-600"
         />
       </div>
@@ -112,7 +128,6 @@
         Total uang diterima: <b>Rp0</b>
       </div>
 
-      <!-- Tombol Simpan -->
       <button
         id="btnSimpan"
         onclick="kirimData()"
@@ -121,7 +136,7 @@
         Simpan Setoran
       </button>
 
-      <!-- Zona Bahaya: Hapus Warga Pindah -->
+      <!-- Hapus Warga Pindah -->
       <div class="mt-6 pt-4 border-t border-slate-200 text-center">
         <button
           id="btnHapusWarga"
@@ -135,25 +150,42 @@
     </div>
   </div>
 
-  <!-- Toast Notifikasi Bawah (Undo + Kirim Struk WA) -->
+  <!-- Modal Riwayat Transaksi Hari Ini (Bisa Hapus Salah Input Kapan Saja) -->
+  <div id="modalRiwayat" class="fixed inset-0 bg-slate-900/60 z-20 hidden items-end justify-center">
+    <div class="bg-white w-full max-w-md rounded-t-3xl p-5 pb-7 max-h-[85vh] overflow-y-auto animate-slide-up shadow-2xl">
+      <div class="flex justify-between items-center mb-3">
+        <div>
+          <h2 class="text-lg font-bold">Riwayat Input Hari Ini</h2>
+          <p class="text-xs text-slate-500">Hapus transaksi jika ada yang salah nominal/warga</p>
+        </div>
+        <button onclick="tutupModal('modalRiwayat')" class="w-8 h-8 rounded-full bg-slate-200 text-slate-700 font-bold flex items-center justify-center">✕</button>
+      </div>
+      <div id="listRiwayat" class="space-y-2.5 mt-3"></div>
+    </div>
+  </div>
+
+  <!-- Toast Notifikasi Bawah -->
   <div id="toastBox" class="fixed bottom-4 left-4 right-4 max-w-md mx-auto bg-slate-900 text-white px-4 py-3.5 rounded-2xl shadow-xl hidden justify-between items-center z-30">
     <span id="toastText" class="text-xs font-medium pr-2">Tersimpan!</span>
     <div class="flex gap-2 shrink-0">
       <a id="btnWaLink" href="#" target="_blank" class="hidden bg-emerald-500 text-white px-3 py-1.5 rounded-lg text-xs font-bold">Kirim WA</a>
-      <button onclick="undoTransaksi()" class="bg-red-500 text-white px-3 py-1.5 rounded-lg text-xs font-bold">Batalkan</button>
+      <button onclick="hapusTransaksiById(lastTrxId, true)" class="bg-red-500 text-white px-3 py-1.5 rounded-lg text-xs font-bold">Batalkan</button>
     </div>
   </div>
 
   <script>
     // =========================================================================
     // TEMPEL LINK WEB APP APPS SCRIPT (/exec) KAMU DI DALAM TANDA KUTIP DI BAWAH:
-    const API_URL = "https://script.google.com/macros/s/AKfycbypWK-8z3f3hF1RVSXeQfsGKchrY51lldFqjmZtiLHA4rFsvCB_A-HMWR3tK-fOSnQI/exec";
+    const API_URL = "PASTE_URL_EXEC_KAMU_DI_SINI";
     // =========================================================================
 
-    const TARIF = 7000;
+    const TARGET_SAMPAH = 15000;
+    const TARGET_PERELEK = 10000;
     let semuaWarga = [];
+    let logHariIni = [];
     let wargaAktif = null;
     let lastTrxId = null;
+    let statusFilter = "semua";
 
     function formatRp(angka) {
       return "Rp" + Number(angka || 0).toLocaleString("id-ID");
@@ -166,8 +198,11 @@
         const data = await res.json();
         if (data.status === "sukses") {
           semuaWarga = data.warga;
+          logHariIni = data.logHariIni || [];
           document.getElementById("kasHariIni").innerText = formatRp(data.kasHariIni);
-          renderWarga(semuaWarga);
+          document.getElementById("countLog").innerText = logHariIni.length;
+          filterWarga();
+          renderRiwayat();
         } else {
           container.innerHTML = `<div class="text-center py-8 text-red-600 text-sm">Gagal memuat data dari Spreadsheet.</div>`;
         }
@@ -176,26 +211,58 @@
       }
     }
 
+    function setFilterStatus(status, btn) {
+      statusFilter = status;
+      document.querySelectorAll(".filter-tab").forEach(el => {
+        el.classList.remove("bg-emerald-600", "text-white");
+        el.classList.add("bg-white", "text-slate-600", "border", "border-slate-200");
+      });
+      btn.classList.remove("bg-white", "text-slate-600", "border", "border-slate-200");
+      btn.classList.add("bg-emerald-600", "text-white");
+      filterWarga();
+    }
+
+    function filterWarga() {
+      const q = document.getElementById("searchInput").value.toLowerCase();
+      const filtered = semuaWarga.filter(w => {
+        const matchText = w.nama.toLowerCase().includes(q) || w.noRumah.toLowerCase().includes(q);
+        if (statusFilter === "lunas") return matchText && w.isLunas;
+        if (statusFilter === "belum") return matchText && !w.isLunas;
+        return matchText;
+      });
+      renderWarga(filtered);
+    }
+
     function renderWarga(list) {
       const container = document.getElementById("listWarga");
       if (list.length === 0) {
-        container.innerHTML = `<div class="text-center py-8 text-slate-500 text-sm">Data warga tidak ditemukan.</div>`;
+        container.innerHTML = `<div class="text-center py-8 text-slate-500 text-sm">Tidak ada warga pada kategori ini.</div>`;
         return;
       }
 
-      container.innerHTML = list.map((w, idx) => {
-        const badgeText = w.sisaSaldo > 0
-          ? `${w.mingguLunas} Mgg + Saldo ${formatRp(w.sisaSaldo)}`
-          : `Lunas ${w.mingguLunas} Minggu`;
-        const badgeStyle = w.sisaSaldo > 0
-          ? "bg-amber-100 text-amber-800 border-amber-200"
-          : "bg-emerald-100 text-emerald-800 border-emerald-200";
+      container.innerHTML = list.map(w => {
+        let badgeText = "";
+        let badgeStyle = "";
+
+        if (w.isLunas) {
+          badgeText = "✅ LUNAS";
+          badgeStyle = "bg-emerald-100 text-emerald-800 border-emerald-200";
+        } else if (w.totalSampah === 0 && w.totalPerelek === 0) {
+          badgeText = "Belum Bayar";
+          badgeStyle = "bg-red-100 text-red-700 border-red-200";
+        } else {
+          const totalKurang = w.sisaSampah + w.sisaPerelek;
+          badgeText = `Kurang ${formatRp(totalKurang)}`;
+          badgeStyle = "bg-amber-100 text-amber-800 border-amber-200";
+        }
 
         return `
           <div onclick="bukaModalById('${w.id}')" class="bg-white p-3.5 rounded-2xl border border-slate-200 shadow-sm flex justify-between items-center active:scale-[0.98] transition cursor-pointer">
             <div>
               <div class="font-bold text-base text-slate-900">${w.noRumah} — ${w.nama}</div>
-              <div class="text-xs text-slate-500 mt-0.5">Total Sampah: ${formatRp(w.totalSampah)} | Perelek: ${formatRp(w.totalPerelek)}</div>
+              <div class="text-xs text-slate-500 mt-0.5">
+                Sampah: <b>${formatRp(w.totalSampah)}</b>/15rb • Perelek: <b>${formatRp(w.totalPerelek)}</b>/10rb
+              </div>
             </div>
             <span class="px-2.5 py-1 rounded-lg text-xs font-bold border ${badgeStyle} text-right shrink-0 ml-2">
               ${badgeText}
@@ -203,14 +270,6 @@
           </div>
         `;
       }).join("");
-    }
-
-    function filterWarga() {
-      const q = document.getElementById("searchInput").value.toLowerCase();
-      const filtered = semuaWarga.filter(w =>
-        w.nama.toLowerCase().includes(q) || w.noRumah.toLowerCase().includes(q)
-      );
-      renderWarga(filtered);
     }
 
     function bukaModalById(id) {
@@ -221,12 +280,26 @@
       document.getElementById("mNoRumah").innerText = `${w.noRumah} • ID: ${w.id}`;
       document.getElementById("mNamaWarga").innerText = w.nama;
 
-      let infoHtml = `Status saat ini: <b>${w.mingguLunas} minggu terbayar</b> (Total Sampah: ${formatRp(w.totalSampah)}).`;
-      if (w.sisaSaldo > 0) {
-        const kurang = TARIF - w.sisaSaldo;
-        infoHtml += `<br>Ada saldo cicilan/deposit <b>${formatRp(w.sisaSaldo)}</b> (kurang <b>${formatRp(kurang)}</b> untuk genap 1 minggu lagi).`;
-      }
-      document.getElementById("mInfoSaldo").innerHTML = infoHtml;
+      document.getElementById("mInfoSaldo").innerHTML = `
+        <div class="flex justify-between mb-1">
+          <span>Sampah Masuk: <b>${formatRp(w.totalSampah)}</b> / Rp15.000</span>
+          <span class="${w.sisaSampah === 0 ? 'text-emerald-700 font-bold' : 'text-amber-700 font-bold'}">
+            ${w.sisaSampah === 0 ? 'Lunas' : 'Kurang ' + formatRp(w.sisaSampah)}
+          </span>
+        </div>
+        <div class="flex justify-between">
+          <span>Perelek Masuk: <b>${formatRp(w.totalPerelek)}</b> / Rp10.000</span>
+          <span class="${w.sisaPerelek === 0 ? 'text-emerald-700 font-bold' : 'text-amber-700 font-bold'}">
+            ${w.sisaPerelek === 0 ? 'Lunas' : 'Kurang ' + formatRp(w.sisaPerelek)}
+          </span>
+        </div>
+      `;
+
+      document.getElementById("btnLunasiSampah").style.display = w.sisaSampah > 0 ? "inline-block" : "none";
+      document.getElementById("btnLunasiSampah").innerText = `Isi Sisa (${formatRp(w.sisaSampah)})`;
+
+      document.getElementById("btnLunasiPerelek").style.display = w.sisaPerelek > 0 ? "inline-block" : "none";
+      document.getElementById("btnLunasiPerelek").innerText = `Isi Sisa (${formatRp(w.sisaPerelek)})`;
 
       document.getElementById("inputSampah").value = "";
       document.getElementById("inputPerelek").value = "";
@@ -238,8 +311,8 @@
       modal.classList.add("flex");
     }
 
-    function tutupModal() {
-      const modal = document.getElementById("modalInput");
+    function tutupModal(modalId) {
+      const modal = document.getElementById(modalId);
       modal.classList.add("hidden");
       modal.classList.remove("flex");
     }
@@ -249,6 +322,18 @@
         b.classList.remove("border-emerald-600", "bg-emerald-50", "text-emerald-800");
         b.classList.add("border-slate-300", "bg-white");
       });
+    }
+
+    function isiSisaSampah() {
+      if (!wargaAktif) return;
+      document.getElementById("inputSampah").value = wargaAktif.sisaSampah;
+      updatePreview();
+    }
+
+    function isiSisaPerelek() {
+      if (!wargaAktif) return;
+      document.getElementById("inputPerelek").value = wargaAktif.sisaPerelek;
+      updatePreview();
     }
 
     function pilihSampah(nominal, btn) {
@@ -278,20 +363,21 @@
       const perelek = Number(document.getElementById("inputPerelek").value) || 0;
       const total = sampah + perelek;
 
-      const totalSampahBaru = (wargaAktif ? wargaAktif.totalSampah : 0) + sampah;
-      const mingguBaru = Math.floor(totalSampahBaru / TARIF);
-      const sisaBaru = totalSampahBaru % TARIF;
+      const sisaSampahBaru = Math.max(0, (wargaAktif ? wargaAktif.sisaSampah : 0) - sampah);
+      const sisaPerelekBaru = Math.max(0, (wargaAktif ? wargaAktif.sisaPerelek : 0) - perelek);
 
-      let ketSampah = "";
-      if (sampah > 0 && sampah < TARIF && wargaAktif.sisaSaldo === 0) {
-        ketSampah = `<br><span class="text-amber-700 font-semibold">⚠️ Nominal di bawah Rp7.000 akan dicatat sebagai cicilan/deposit.</span>`;
-      } else if (sampah > 0) {
-        ketSampah = `<br>Status sampah baru: <b>${mingguBaru} minggu</b> + sisa saldo <b>${formatRp(sisaBaru)}</b>.`;
+      let statusBaru = "";
+      if (total > 0) {
+        if (sisaSampahBaru === 0 && sisaPerelekBaru === 0) {
+          statusBaru = `<br><span class="text-emerald-700 font-bold">✅ Setelah simpan, iuran warga ini LUNAS 100%!</span>`;
+        } else {
+          statusBaru = `<br>Sisa setelah simpan: Sampah <b>${formatRp(sisaSampahBaru)}</b> • Perelek <b>${formatRp(sisaPerelekBaru)}</b>`;
+        }
       }
 
       document.getElementById("previewBox").innerHTML = `
         Total uang diterima: <b class="text-sm">${formatRp(total)}</b>
-        ${ketSampah}
+        ${statusBaru}
       `;
     }
 
@@ -322,7 +408,7 @@
         const data = await res.json();
 
         if (data.status === "sukses") {
-          tutupModal();
+          tutupModal("modalInput");
           lastTrxId = data.idTransaksi;
 
           const waBtn = document.getElementById("btnWaLink");
@@ -351,22 +437,57 @@
       }
     }
 
-    async function undoTransaksi() {
-      if (!lastTrxId) return;
+    function bukaRiwayat() {
+      renderRiwayat();
+      const modal = document.getElementById("modalRiwayat");
+      modal.classList.remove("hidden");
+      modal.classList.add("flex");
+    }
+
+    function renderRiwayat() {
+      const listEl = document.getElementById("listRiwayat");
+      if (logHariIni.length === 0) {
+        listEl.innerHTML = `<div class="text-center py-8 text-slate-400 text-xs">Belum ada transaksi masuk hari ini.</div>`;
+        return;
+      }
+
+      listEl.innerHTML = logHariIni.map(item => `
+        <div class="p-3 bg-slate-50 border border-slate-200 rounded-xl flex justify-between items-center">
+          <div>
+            <div class="text-xs text-slate-400 font-semibold">${item.jam} • ${item.noRumah}</div>
+            <div class="font-bold text-sm text-slate-800">${item.namaWarga}</div>
+            <div class="text-xs text-slate-600">Sampah ${formatRp(item.sampah)} + Perelek ${formatRp(item.perelek)} = <b>${formatRp(item.total)}</b></div>
+          </div>
+          <button
+            onclick="hapusTransaksiById('${item.idTrx}', false)"
+            class="bg-red-100 text-red-700 hover:bg-red-200 px-3 py-1.5 rounded-lg text-xs font-bold shrink-0 ml-2"
+          >
+            Hapus
+          </button>
+        </div>
+      `).join("");
+    }
+
+    async function hapusTransaksiById(idTrx, dariToast) {
+      if (!idTrx) return;
+      if (!dariToast && !confirm("Hapus transaksi ini dari catatan?")) return;
+
       try {
         const res = await fetch(API_URL, {
           method: "POST",
-          body: JSON.stringify({ action: "undo", idTransaksi: lastTrxId })
+          body: JSON.stringify({ action: "hapus_transaksi", idTransaksi: idTrx })
         });
         const data = await res.json();
         if (data.status === "sukses") {
-          const toast = document.getElementById("toastBox");
-          toast.classList.add("hidden");
-          toast.classList.remove("flex");
-          lastTrxId = null;
+          if (dariToast) {
+            const toast = document.getElementById("toastBox");
+            toast.classList.add("hidden");
+            toast.classList.remove("flex");
+            lastTrxId = null;
+          }
           await muatData();
         } else {
-          alert(data.pesan || "Gagal membatalkan transaksi.");
+          alert(data.pesan || "Gagal menghapus transaksi.");
         }
       } catch (err) {
         alert("Gagal terhubung ke server.");
@@ -375,10 +496,8 @@
 
     async function hapusWargaPindah() {
       if (!wargaAktif) return;
-
-      // Konfirmasi Ganda agar tidak salah hapus
-      const konfirmasi1 = confirm(`Yakin ingin menghapus ${wargaAktif.nama} (${wargaAktif.noRumah}) karena pindah rumah?\n\nSemua data profil dan riwayat setoran warga ini di Spreadsheet akan dihapus permanen.`);
-      if (!konfirmasi1) return;
+      const konfirmasi = confirm(`Yakin ingin menghapus ${wargaAktif.nama} (${wargaAktif.noRumah}) karena pindah rumah?\n\nSemua data profil dan riwayat setoran warga ini di Spreadsheet akan dihapus permanen.`);
+      if (!konfirmasi) return;
 
       const btn = document.getElementById("btnHapusWarga");
       const teksAsli = btn.innerText;
@@ -396,7 +515,7 @@
         const data = await res.json();
 
         if (data.status === "sukses") {
-          tutupModal();
+          tutupModal("modalInput");
           alert(`Data ${wargaAktif.nama} beserta seluruh riwayat transaksinya berhasil dihapus.`);
           await muatData();
         } else {
