@@ -146,6 +146,7 @@
 
       <button
         id="btnSimpan"
+        type="button"
         onclick="kirimData()"
         class="w-full py-3.5 bg-emerald-600 hover:bg-emerald-700 active:scale-[0.99] text-white font-bold rounded-xl text-base shadow-md transition disabled:bg-slate-400"
       >
@@ -176,7 +177,6 @@
         <button onclick="tutupModal('modalRiwayat')" class="w-8 h-8 rounded-full bg-slate-200 text-slate-700 font-bold flex items-center justify-center">✕</button>
       </div>
 
-      <!-- Kartu Ringkasan Total Pendapatan Bulanan (Dari Tabel Rekap) -->
       <div class="bg-emerald-50 border border-emerald-200 rounded-2xl p-3.5 mb-3">
         <div class="text-[11px] font-bold uppercase tracking-wider text-emerald-800 mb-2">Total Pendapatan Tabel Rekap</div>
         <div class="grid grid-cols-2 gap-2 text-xs mb-2">
@@ -195,13 +195,11 @@
         </div>
       </div>
 
-      <!-- Tab Filter Mode Riwayat (Hari Ini vs Per Bulan Keseluruhan) -->
       <div class="flex gap-1.5 text-xs font-bold mb-2">
         <button id="tabLogHariIni" onclick="setModeRiwayat('hari_ini')" class="flex-1 py-2 rounded-lg bg-slate-800 text-white">Hari Ini</button>
         <button id="tabLogBulanan" onclick="setModeRiwayat('bulanan')" class="flex-1 py-2 rounded-lg bg-slate-100 text-slate-700 border border-slate-200">Per Bulan (Keseluruhan)</button>
       </div>
 
-      <!-- Dropdown Pilih Bulan (Muncul saat pilih mode Per Bulan) -->
       <div id="filterBulanBox" class="hidden mb-3">
         <select id="selectBulan" onchange="renderRiwayat()" class="w-full px-3 py-2 bg-white border border-slate-300 rounded-xl text-xs font-bold text-slate-800 focus:outline-none focus:border-emerald-600"></select>
         <div id="ringkasanFilterBulan" class="mt-2 bg-blue-50 border border-blue-200 text-blue-900 rounded-xl p-2.5 text-xs flex justify-between items-center"></div>
@@ -226,7 +224,7 @@
     const API_URL = "https://script.google.com/macros/s/AKfycbypWK-8z3f3hF1RVSXeQfsGKchrY51lldFqjmZtiLHA4rFsvCB_A-HMWR3tK-fOSnQI/exec";
     // =========================================================================
 
-    const CACHE_KEY = "kas_rt03_mekarsari_v2";
+    const CACHE_KEY = "kas_rt03_mekarsari_v3";
     const NAMA_BULAN = ["Januari", "Februari", "Maret", "April", "Mei", "Juni", "Juli", "Agustus", "September", "Oktober", "November", "Desember"];
 
     let semuaWarga = [];
@@ -273,6 +271,8 @@
         const sisaPerelek = Math.max(0, (Number(w.targetPerelek) || 0) - (Number(w.masukPerelek) || 0));
         return {
           ...w,
+          rowSampah: w.rowSampah || w.rowNum,
+          rowPerelek: w.rowPerelek || w.rowNum,
           sisaSampah,
           sisaPerelek,
           isLunas: sisaSampah === 0 && sisaPerelek === 0
@@ -353,7 +353,7 @@
         if (semuaWarga.length === 0) {
           container.innerHTML = `<div class="text-center py-8 text-red-600 text-sm">Koneksi gagal. Pastikan API_URL sudah diisi dan tab Rekap_Sampah, Rekap_Perelek, Log_Transaksi sudah dibuat.</div>`;
         } else {
-          alert("Koneksi ke Google Sheets terganggu.");
+          alert("Koneksi ke Google Sheets terganggu: " + err.message);
         }
         return null;
       } finally {
@@ -411,7 +411,7 @@
           : ` • <i>Non-Perelek</i>`;
 
         return `
-          <div onclick="bukaModalByRow(${w.rowNum})" class="bg-white p-3.5 rounded-2xl border border-slate-200 shadow-sm flex justify-between items-center active:scale-[0.98] transition cursor-pointer">
+          <div onclick="bukaModalByRow(${w.rowSampah})" class="bg-white p-3.5 rounded-2xl border border-slate-200 shadow-sm flex justify-between items-center active:scale-[0.98] transition cursor-pointer">
             <div>
               <div class="font-bold text-base text-slate-900">
                 <span class="text-xs font-bold text-emerald-700 bg-emerald-50 px-1.5 py-0.5 rounded mr-1">${w.blok}</span>
@@ -429,15 +429,15 @@
       }).join("");
     }
 
-    function bukaModalByRow(rowNum) {
-      const w = semuaWarga.find(item => item.rowNum === rowNum);
+    function bukaModalByRow(rowSampah) {
+      const w = semuaWarga.find(item => item.rowSampah === rowSampah);
       if (!w) return;
       wargaAktif = w;
 
       document.getElementById("mBlok").innerText = `NO. ${w.no} • ${w.blok}`;
       document.getElementById("mNamaWarga").innerText = w.nama;
 
-      const rincianHtml = w.rincianMinggu.map(m =>
+      const rincianHtml = (w.rincianMinggu || []).map(m =>
         `<span class="inline-block bg-white border border-slate-200 rounded px-1.5 py-0.5 text-[11px] mr-1 mt-1">M${m.minggu}: S ${m.sampah/1000}rb | P ${m.perelek/1000}rb</span>`
       ).join("");
 
@@ -495,6 +495,7 @@
       });
       btn.classList.remove("border-slate-300", "bg-white", "text-slate-700");
       btn.classList.add("border-emerald-600", "bg-emerald-600", "text-white");
+      updatePreview();
     }
 
     function resetChipStyles() {
@@ -551,7 +552,7 @@
         if (sisaSampahBaru === 0 && sisaPerelekBaru === 0) {
           statusBaru = `<br><span class="text-emerald-700 font-bold">✅ Setelah simpan ke Minggu ${mingguAktif}, warga ini LUNAS 100%!</span>`;
         } else {
-          statusBaru = `<br>Masuk ke <b>Minggu ${mingguAktif}</b> • Sisa kurang: Kebersihan <b>${formatRp(sisaSampahBaru)}</b>${wargaAktif.targetPerelek > 0 ? ` • Perelek <b>${formatRp(sisaPerelekBaru)}</b>` : ''}`;
+          statusBaru = `<br>Masuk ke <b>Minggu ${mingguAktif}</b> • Sisa kurang: Kebersihan <b>${formatRp(sisaSampahBaru)}</b>${wargaAktif && wargaAktif.targetPerelek > 0 ? ` • Perelek <b>${formatRp(sisaPerelekBaru)}</b>` : ''}`;
         }
       }
 
@@ -562,13 +563,17 @@
     }
 
     async function kirimData() {
-     async function kirimData() {
       const sampah = Number(document.getElementById("inputSampah").value) || 0;
       const perelek = Number(document.getElementById("inputPerelek").value) || 0;
       const totalBayar = sampah + perelek;
 
       if (totalBayar <= 0) {
-        alert("Isi nominal Kebersihan atau Perelek terlebih dahulu!");
+        alert("Isi nominal Kebersihan atau Perelek terlebih dahulu! (Klik tombol 'Isi Sisa' atau ketik angka)");
+        return;
+      }
+
+      if (!wargaAktif || !wargaAktif.rowSampah) {
+        alert("Data warga belum siap. Tutup jendela ini lalu klik Refresh.");
         return;
       }
 
@@ -579,55 +584,30 @@
       const clientTrxId = "TRX-" + Date.now();
       const targetWarga = { ...wargaAktif };
 
-      const data = await panggilServer({
-        action: "simpan",
-        idTrx: clientTrxId,
-        rowSampah: targetWarga.rowSampah,
-        rowPerelek: targetWarga.rowPerelek,
-        mingguKe: mingguAktif,
-        blok: targetWarga.blok,
-        nama: targetWarga.nama,
-        sampah: sampah,
-        perelek: perelek
-      });
+      try {
+        const data = await panggilServer({
+          action: "simpan",
+          idTrx: clientTrxId,
+          rowSampah: targetWarga.rowSampah,
+          rowPerelek: targetWarga.rowPerelek || targetWarga.rowSampah,
+          mingguKe: mingguAktif,
+          blok: targetWarga.blok,
+          nama: targetWarga.nama,
+          sampah: sampah,
+          perelek: perelek
+        });
 
-      btn.disabled = false;
-      btn.innerText = "Simpan Setoran";
-
-      if (data) {
-        tutupModal("modalInput");
-        lastTrxId = clientTrxId;
-        document.getElementById("toastText").innerText = `Tersimpan ${formatRp(totalBayar)} (${targetWarga.nama} - M${mingguAktif})`;
-        tampilkanToast();
-      }
-     }
-
-      const btn = document.getElementById("btnSimpan");
-      btn.disabled = true;
-      btn.innerText = "Menyimpan ke Rekap Excel...";
-
-      const clientTrxId = "TRX-" + Date.now();
-      const targetWarga = { ...wargaAktif };
-
-      const data = await panggilServer({
-        action: "simpan",
-        idTrx: clientTrxId,
-        rowNum: targetWarga.rowNum,
-        mingguKe: mingguAktif,
-        blok: targetWarga.blok,
-        nama: targetWarga.nama,
-        sampah: sampah,
-        perelek: perelek
-      });
-
-      btn.disabled = false;
-      btn.innerText = "Simpan Setoran";
-
-      if (data) {
-        tutupModal("modalInput");
-        lastTrxId = clientTrxId;
-        document.getElementById("toastText").innerText = `Tersimpan ${formatRp(totalBayar)} (${targetWarga.nama} - M${mingguAktif})`;
-        tampilkanToast();
+        if (data) {
+          tutupModal("modalInput");
+          lastTrxId = clientTrxId;
+          document.getElementById("toastText").innerText = `Tersimpan ${formatRp(totalBayar)} (${targetWarga.nama} - M${mingguAktif})`;
+          tampilkanToast();
+        }
+      } catch (err) {
+        alert("Gagal menyimpan: " + err.message);
+      } finally {
+        btn.disabled = false;
+        btn.innerText = "Simpan Setoran";
       }
     }
 
@@ -738,7 +718,7 @@
       }
     }
 
-   async function hapusWargaPindah() {
+    async function hapusWargaPindah() {
       if (!wargaAktif) return;
       const konfirmasi = confirm(`Yakin ingin menghapus ${wargaAktif.nama} (${wargaAktif.blok}) karena pindah rumah?\n\nNama dan nominal pada baris nomor ${wargaAktif.no} di kedua tabel akan dikosongkan.`);
       if (!konfirmasi) return;
@@ -748,18 +728,20 @@
       btn.innerText = "Menghapus data warga...";
       btn.disabled = true;
 
-      const data = await panggilServer({
-        action: "hapus_warga",
-        rowSampah: wargaAktif.rowSampah,
-        rowPerelek: wargaAktif.rowPerelek
-      });
+      try {
+        const data = await panggilServer({
+          action: "hapus_warga",
+          rowSampah: wargaAktif.rowSampah,
+          rowPerelek: wargaAktif.rowPerelek || wargaAktif.rowSampah
+        });
 
-      btn.innerText = teksAsli;
-      btn.disabled = false;
-
-      if (data) {
-        tutupModal("modalInput");
-        alert(`Data ${wargaAktif.nama} berhasil dikosongkan dari daftar.`);
+        if (data) {
+          tutupModal("modalInput");
+          alert(`Data ${wargaAktif.nama} berhasil dikosongkan dari daftar.`);
+        }
+      } finally {
+        btn.innerText = teksAsli;
+        btn.disabled = false;
       }
     }
 
